@@ -1,56 +1,103 @@
 """
-Configuration settings for the AI Map Quality Checker
+Centralized Configuration Settings
+AI Map Quality Checker
+Deployment-safe, environment-aware
 """
+
 import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# =====================================================
+# OPTIONAL .env SUPPORT (SAFE IMPORT)
+# =====================================================
 
-# Mapbox Configuration
-MAPBOX_TOKEN = os.getenv('MAPBOX_TOKEN', 'your_mapbox_token_here')
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not installed — safe to ignore (Streamlit Cloud)
+    pass
 
-# Model Parameters
+
+# =====================================================
+# ENVIRONMENT FLAGS
+# =====================================================
+
+ENVIRONMENT = os.getenv("APP_ENV", "production")
+
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
+
+# =====================================================
+# MAPBOX CONFIGURATION
+# =====================================================
+
+MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
+
+# If no token provided, fallback to public style
+DEFAULT_MAP_STYLE = "carto-positron" if not MAPBOX_TOKEN else "mapbox://styles/mapbox/streets-v11"
+
+
+# =====================================================
+# ANOMALY DETECTION PARAMETERS
+# =====================================================
+
 ANOMALY_DETECTION_PARAMS = {
-    'contamination': 0.1,  # Expected proportion of outliers
-    'n_estimators': 100,
-    'max_samples': 'auto',
-    'random_state': 42
+    "contamination": float(os.getenv("ANOMALY_CONTAMINATION", 0.1)),
+    "n_estimators": int(os.getenv("ANOMALY_ESTIMATORS", 100)),
+    "max_samples": "auto",
+    "random_state": 42
 }
 
-# Validation Rules
+
+# =====================================================
+# VALIDATION RULES
+# =====================================================
+
 VALIDATION_RULES = {
-    'min_area': 10,  # Minimum area in square meters
-    'max_area': 1000000,  # Maximum area in square meters
-    'min_perimeter': 10,  # Minimum perimeter in meters
-    'complexity_threshold': 0.5,  # Complexity ratio threshold
-    'self_intersection_check': True,
-    'coordinate_precision': 6  # Decimal places for coordinates
+    "min_area": float(os.getenv("MIN_AREA", 10)),
+    "max_area": float(os.getenv("MAX_AREA", 1_000_000)),
+    "min_perimeter": float(os.getenv("MIN_PERIMETER", 10)),
+    "self_intersection_check": True,
+    "coordinate_precision": int(os.getenv("COORD_PRECISION", 6)),
 }
 
-# Feature Engineering Parameters
+
+# =====================================================
+# FEATURE ENGINEERING PARAMETERS
+# =====================================================
+
 FEATURE_PARAMS = {
-    'use_area': True,
-    'use_perimeter': True,
-    'use_complexity': True,
-    'use_compactness': True,
-    'use_convexity': True,
-    'use_aspect_ratio': True
+    "use_area": True,
+    "use_perimeter": True,
+    "use_complexity": True,
+    "use_compactness": True,
+    "use_convexity": True,
+    "use_aspect_ratio": True,
 }
 
-# Visualization Settings
+
+# =====================================================
+# VISUALIZATION SETTINGS
+# =====================================================
+
 VIZ_SETTINGS = {
-    'default_zoom': 12,
-    'default_center': [51.1657, 10.4515],  # Germany center
-    'valid_color': '#00FF00',
-    'invalid_color': '#FF0000',
-    'anomaly_color': '#FFA500',
-    'map_style': 'open-street-map'
+    "default_zoom": 12,
+    "default_center": [51.1657, 10.4515],  # Germany center
+    "valid_color": "#00CC96",
+    "invalid_color": "#EF553B",
+    "anomaly_color": "#FFA15A",
+    "critical_color": "#FF00FF",
+    "map_style": DEFAULT_MAP_STYLE,
 }
 
-# Report Settings
+
+# =====================================================
+# REPORT SETTINGS
+# =====================================================
+
 REPORT_SETTINGS = {
-    'max_errors_display': 100,
-    'export_format': 'csv',
-    'include_screenshots': False
+    "max_errors_display": 100,
+    "export_format": "json",
+    "include_screenshots": False,
+    "report_version": "2.0"
 }
