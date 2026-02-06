@@ -1,239 +1,282 @@
 """
-Error report generation module
+Enhanced Error Report Generator
+Executive-ready, ML-aware, deployment-safe
 """
+
 import pandas as pd
-import geopandas as gpd
-from typing import Dict, List
+import numpy as np
+from typing import Dict, List, Optional
 from datetime import datetime
 import json
 
 
 class ErrorReporter:
-    """Generates comprehensive error reports"""
-    
+    """
+    Generates intelligent, explainable QA reports
+    with severity scoring and risk assessment.
+    """
+
     def __init__(self):
         self.report_data = {}
-        
-    def generate_report(self, 
-                       validated_gdf: gpd.GeoDataFrame,
-                       errors_df: pd.DataFrame,
-                       anomaly_gdf: gpd.GeoDataFrame = None,
-                       validation_summary: Dict = None,
-                       anomaly_summary: Dict = None) -> Dict:
-        """
-        Generate comprehensive error report
-        
-        Args:
-            validated_gdf: GeoDataFrame with validation results
-            errors_df: DataFrame with detailed errors
-            anomaly_gdf: GeoDataFrame with anomaly detection results
-            validation_summary: Summary of validation results
-            anomaly_summary: Summary of anomaly detection results
-            
-        Returns:
-            Dictionary containing the complete report
-        """
+
+    # ---------------------------------------------------
+    # MAIN REPORT GENERATOR
+    # ---------------------------------------------------
+
+    def generate_report(
+        self,
+        validated_df: pd.DataFrame,
+        errors_df: pd.DataFrame,
+        anomaly_df: Optional[pd.DataFrame] = None,
+        validation_summary: Optional[Dict] = None,
+        anomaly_summary: Optional[Dict] = None
+    ) -> Dict:
+
+        total_features = len(validated_df)
+
         report = {
-            'metadata': {
-                'generated_at': datetime.now().isoformat(),
-                'total_features': len(validated_gdf)
+            "metadata": {
+                "generated_at": datetime.now().isoformat(),
+                "total_features": total_features,
+                "report_version": "2.0"
             },
-            'validation': {},
-            'anomaly_detection': {},
-            'combined_issues': {},
-            'recommendations': []
+            "executive_summary": {},
+            "validation": validation_summary or {},
+            "anomaly_detection": anomaly_summary or {},
+            "combined_issues": {},
+            "risk_assessment": {},
+            "recommendations": []
         }
-        
-        # Validation section
-        if validation_summary:
-            report['validation'] = validation_summary
-        
-        if not errors_df.empty:
-            report['validation']['errors_by_type'] = errors_df['error_type'].value_counts().to_dict()
-            report['validation']['top_errors'] = errors_df.head(10).to_dict('records')
-        
-        # Anomaly detection section
-        if anomaly_gdf is not None and anomaly_summary:
-            report['anomaly_detection'] = anomaly_summary
-            
-            if 'is_anomaly' in anomaly_gdf.columns:
-                anomalous_features = anomaly_gdf[anomaly_gdf['is_anomaly']]
-                if len(anomalous_features) > 0:
-                    report['anomaly_detection']['top_anomalies'] = self._get_top_anomalies(anomalous_features)
-        
-        # Combined issues
-        report['combined_issues'] = self._analyze_combined_issues(validated_gdf, anomaly_gdf)
-        
-        # Recommendations
-        report['recommendations'] = self._generate_recommendations(
-            validated_gdf, errors_df, anomaly_gdf
+
+        # Validation error details
+        if errors_df is not None and not errors_df.empty:
+            report["validation"]["errors_by_type"] = (
+                errors_df["error_type"].value_counts().to_dict()
+                if "error_type" in errors_df.columns else {}
+            )
+
+            report["validation"]["top_errors"] = errors_df.head(10).to_dict("records")
+
+        # Top anomalies
+        if anomaly_df is not None and "is_anomaly" in anomaly_df.columns:
+            anomalous = anomaly_df[anomaly_df["is_anomaly"]]
+            report["anomaly_detection"]["top_anomalies"] = self._get_top_anomalies(anomalous)
+
+        # Combined issue analysis
+        report["combined_issues"] = self._analyze_combined(validated_df, anomaly_df)
+
+        # Risk scoring
+        risk_score = self._calculate_risk_score(
+            validated_df, errors_df, anomaly_df
         )
-        
+
+        report["risk_assessment"] = {
+            "risk_score": risk_score,
+            "severity_level": self._severity_label(risk_score)
+        }
+
+        # Data Quality Index
+        report["executive_summary"] = self._generate_executive_summary(
+            validated_df, errors_df, anomaly_df, risk_score
+        )
+
+        # Recommendations
+        report["recommendations"] = self._generate_recommendations(
+            validated_df, errors_df, anomaly_df
+        )
+
         self.report_data = report
         return report
-    
-    def _get_top_anomalies(self, anomalous_gdf: gpd.GeoDataFrame, top_n: int = 10) -> List[Dict]:
-        """Get top N anomalies by score"""
-        if 'anomaly_score' not in anomalous_gdf.columns:
+
+    # ---------------------------------------------------
+    # TOP ANOMALIES
+    # ---------------------------------------------------
+
+    def _get_top_anomalies(self, df: pd.DataFrame, top_n=10) -> List[Dict]:
+
+        if df.empty or "anomaly_score" not in df.columns:
             return []
-        
-        # Sort by anomaly score (lower is more anomalous)
-        sorted_anomalies = anomalous_gdf.sort_values('anomaly_score').head(top_n)
-        
+
+        df_sorted = df.sort_values("anomaly_score").head(top_n)
+
         results = []
-        for idx, row in sorted_anomalies.iterrows():
+        for idx, row in df_sorted.iterrows():
+            bounds = row.geometry.bounds if "geometry" in df.columns else None
+
             results.append({
-                'feature_id': int(idx),
-                'anomaly_score': float(row['anomaly_score']),
-                'geometry_type': row.geometry.geom_type,
-                'bounds': list(row.geometry.bounds)
+                "feature_id": int(idx),
+                "anomaly_score": float(row["anomaly_score"]),
+                "confidence": float(row.get("anomaly_confidence", 0)),
+                "geometry_type": row.get("geometry_type", "Unknown"),
+                "bounds": list(bounds) if bounds else None
             })
-        
+
         return results
-    
-    def _analyze_combined_issues(self, 
-                                 validated_gdf: gpd.GeoDataFrame,
-                                 anomaly_gdf: gpd.GeoDataFrame = None) -> Dict:
-        """Analyze features with both validation errors and anomalies"""
+
+    # ---------------------------------------------------
+    # COMBINED ISSUES
+    # ---------------------------------------------------
+
+    def _analyze_combined(self, validated_df, anomaly_df):
+
         combined = {}
-        
-        if anomaly_gdf is None:
+
+        if anomaly_df is None:
             return combined
-        
-        # Find features with both validation errors and anomalies
-        invalid_features = validated_gdf[~validated_gdf['is_valid']].index
-        anomalous_features = anomaly_gdf[anomaly_gdf['is_anomaly']].index
-        
-        both_issues = invalid_features.intersection(anomalous_features)
-        
-        combined['features_with_both_issues'] = len(both_issues)
-        combined['only_validation_errors'] = len(invalid_features) - len(both_issues)
-        combined['only_anomalies'] = len(anomalous_features) - len(both_issues)
-        
-        if len(both_issues) > 0:
-            combined['critical_features'] = both_issues.tolist()[:20]  # Top 20
-        
+
+        invalid = validated_df[~validated_df["is_valid"]].index \
+            if "is_valid" in validated_df.columns else []
+
+        anomalous = anomaly_df[anomaly_df["is_anomaly"]].index \
+            if "is_anomaly" in anomaly_df.columns else []
+
+        both = set(invalid).intersection(set(anomalous))
+
+        combined["features_with_both_issues"] = len(both)
+        combined["only_validation_errors"] = len(invalid) - len(both)
+        combined["only_anomalies"] = len(anomalous) - len(both)
+
         return combined
-    
-    def _generate_recommendations(self,
-                                 validated_gdf: gpd.GeoDataFrame,
-                                 errors_df: pd.DataFrame,
-                                 anomaly_gdf: gpd.GeoDataFrame = None) -> List[str]:
-        """Generate actionable recommendations based on findings"""
-        recommendations = []
-        
-        # Validation recommendations
-        if not errors_df.empty:
-            error_counts = errors_df['error_type'].value_counts()
-            
-            if 'geometry_validity' in error_counts.index:
-                recommendations.append(
-                    f"Fix {error_counts['geometry_validity']} invalid geometries using geometry repair tools"
-                )
-            
-            if 'self_intersection' in error_counts.index:
-                recommendations.append(
-                    f"Resolve {error_counts['self_intersection']} self-intersecting geometries"
-                )
-            
-            if 'area_too_small' in error_counts.index:
-                recommendations.append(
-                    f"Review {error_counts['area_too_small']} features with areas below minimum threshold"
-                )
-            
-            if 'coordinate_precision' in error_counts.index:
-                recommendations.append(
-                    f"Reduce coordinate precision for {error_counts['coordinate_precision']} features"
-                )
-        
-        # Anomaly recommendations
-        if anomaly_gdf is not None and 'is_anomaly' in anomaly_gdf.columns:
-            anomaly_count = anomaly_gdf['is_anomaly'].sum()
+
+    # ---------------------------------------------------
+    # RISK SCORE
+    # ---------------------------------------------------
+
+    def _calculate_risk_score(self, validated_df, errors_df, anomaly_df):
+
+        total = len(validated_df)
+        if total == 0:
+            return 0
+
+        invalid_count = (
+            (~validated_df["is_valid"]).sum()
+            if "is_valid" in validated_df.columns else 0
+        )
+
+        anomaly_count = (
+            anomaly_df["is_anomaly"].sum()
+            if anomaly_df is not None and "is_anomaly" in anomaly_df.columns else 0
+        )
+
+        error_weight = 0.6
+        anomaly_weight = 0.4
+
+        score = (
+            (invalid_count / total) * 100 * error_weight +
+            (anomaly_count / total) * 100 * anomaly_weight
+        )
+
+        return round(min(score, 100), 2)
+
+    def _severity_label(self, score):
+
+        if score < 10:
+            return "Low"
+        elif score < 30:
+            return "Moderate"
+        elif score < 60:
+            return "High"
+        else:
+            return "Critical"
+
+    # ---------------------------------------------------
+    # EXECUTIVE SUMMARY
+    # ---------------------------------------------------
+
+    def _generate_executive_summary(self, validated_df, errors_df, anomaly_df, risk_score):
+
+        total = len(validated_df)
+
+        valid_count = (
+            validated_df["is_valid"].sum()
+            if "is_valid" in validated_df.columns else total
+        )
+
+        anomaly_count = (
+            anomaly_df["is_anomaly"].sum()
+            if anomaly_df is not None and "is_anomaly" in anomaly_df.columns else 0
+        )
+
+        data_quality_index = round((valid_count / total) * 100, 2) if total > 0 else 0
+
+        return {
+            "data_quality_index": data_quality_index,
+            "valid_features": int(valid_count),
+            "invalid_features": int(total - valid_count),
+            "anomalies_detected": int(anomaly_count),
+            "overall_risk_score": risk_score
+        }
+
+    # ---------------------------------------------------
+    # RECOMMENDATIONS
+    # ---------------------------------------------------
+
+    def _generate_recommendations(self, validated_df, errors_df, anomaly_df):
+
+        recs = []
+
+        if errors_df is not None and not errors_df.empty:
+            recs.append("Review invalid geometries and apply automated repair where possible.")
+
+        if anomaly_df is not None and "is_anomaly" in anomaly_df.columns:
+            anomaly_count = anomaly_df["is_anomaly"].sum()
             if anomaly_count > 0:
-                recommendations.append(
-                    f"Manually review {anomaly_count} anomalous features for data quality issues"
-                )
-        
-        # General recommendations
-        invalid_count = (~validated_gdf['is_valid']).sum()
-        if invalid_count > len(validated_gdf) * 0.1:
-            recommendations.append(
-                "High error rate detected (>10%). Consider reviewing data collection process"
-            )
-        
-        if len(recommendations) == 0:
-            recommendations.append("Data quality looks good! No major issues detected.")
-        
-        return recommendations
-    
-    def export_to_csv(self, filepath: str, validated_gdf: gpd.GeoDataFrame, errors_df: pd.DataFrame):
-        """Export error report to CSV"""
-        try:
-            # Export validation errors
-            if not errors_df.empty:
-                errors_df.to_csv(filepath.replace('.csv', '_errors.csv'), index=False)
-            
-            # Export invalid features
-            invalid_features = validated_gdf[~validated_gdf['is_valid']].copy()
-            if len(invalid_features) > 0:
-                # Drop geometry for CSV export
-                invalid_features_export = invalid_features.drop(columns=['geometry'])
-                invalid_features_export.to_csv(filepath.replace('.csv', '_invalid_features.csv'), index=True)
-            
-            return True, f"Report exported to {filepath}"
-            
-        except Exception as e:
-            return False, f"Error exporting report: {str(e)}"
-    
+                recs.append("Manually inspect anomalous features identified by AI model.")
+
+        invalid_count = (
+            (~validated_df["is_valid"]).sum()
+            if "is_valid" in validated_df.columns else 0
+        )
+
+        if len(validated_df) > 0 and invalid_count / len(validated_df) > 0.1:
+            recs.append("High validation failure rate detected. Investigate data collection workflow.")
+
+        if not recs:
+            recs.append("No major data quality issues detected.")
+
+        return recs
+
+    # ---------------------------------------------------
+    # EXPORT
+    # ---------------------------------------------------
+
     def export_to_json(self, filepath: str):
-        """Export report to JSON"""
+
         try:
-            with open(filepath, 'w') as f:
+            with open(filepath, "w") as f:
                 json.dump(self.report_data, f, indent=2)
-            
+
             return True, f"Report exported to {filepath}"
-            
+
         except Exception as e:
-            return False, f"Error exporting report: {str(e)}"
-    
-    def get_summary_text(self) -> str:
-        """Get human-readable summary text"""
+            return False, f"Export error: {str(e)}"
+
+    # ---------------------------------------------------
+    # HUMAN SUMMARY
+    # ---------------------------------------------------
+
+    def get_summary_text(self):
+
         if not self.report_data:
-            return "No report data available"
-        
-        lines = []
-        lines.append("=" * 60)
-        lines.append("AI MAP QUALITY CHECKER - REPORT SUMMARY")
-        lines.append("=" * 60)
-        lines.append(f"Generated: {self.report_data['metadata']['generated_at']}")
-        lines.append(f"Total Features: {self.report_data['metadata']['total_features']}")
-        lines.append("")
-        
-        # Validation section
-        if self.report_data.get('validation'):
-            val = self.report_data['validation']
-            lines.append("VALIDATION RESULTS:")
-            lines.append(f"  Valid: {val.get('valid_features', 0)}")
-            lines.append(f"  Invalid: {val.get('invalid_features', 0)}")
-            lines.append(f"  Validation Rate: {val.get('validation_rate', '0%')}")
-            lines.append(f"  Total Errors: {val.get('total_errors', 0)}")
-            lines.append("")
-        
-        # Anomaly section
-        if self.report_data.get('anomaly_detection'):
-            anom = self.report_data['anomaly_detection']
-            lines.append("ANOMALY DETECTION:")
-            lines.append(f"  Anomalies: {anom.get('anomalies_detected', 0)}")
-            lines.append(f"  Normal: {anom.get('normal_features', 0)}")
-            lines.append(f"  Anomaly Rate: {anom.get('anomaly_rate', '0%')}")
-            lines.append("")
-        
-        # Recommendations
-        if self.report_data.get('recommendations'):
-            lines.append("RECOMMENDATIONS:")
-            for i, rec in enumerate(self.report_data['recommendations'], 1):
-                lines.append(f"  {i}. {rec}")
-        
-        lines.append("=" * 60)
-        
+            return "No report generated."
+
+        summary = self.report_data["executive_summary"]
+        risk = self.report_data["risk_assessment"]
+
+        lines = [
+            "=" * 60,
+            "AI MAP QUALITY CHECKER - EXECUTIVE SUMMARY",
+            "=" * 60,
+            f"Generated: {self.report_data['metadata']['generated_at']}",
+            f"Total Features: {self.report_data['metadata']['total_features']}",
+            "",
+            f"Data Quality Index: {summary.get('data_quality_index', 0)}%",
+            f"Invalid Features: {summary.get('invalid_features', 0)}",
+            f"Anomalies Detected: {summary.get('anomalies_detected', 0)}",
+            "",
+            f"Overall Risk Score: {risk.get('risk_score', 0)}",
+            f"Severity Level: {risk.get('severity_level', 'Unknown')}",
+            "=" * 60
+        ]
+
         return "\n".join(lines)
