@@ -36,7 +36,8 @@ st.set_page_config(
 
 for key in [
     "df", "validated_df", "anomaly_df",
-    "features", "errors_df", "report"
+    "features", "errors_df", "report",
+    "detector"
 ]:
     if key not in st.session_state:
         st.session_state[key] = None
@@ -130,6 +131,7 @@ if run_analysis and st.session_state.df is not None:
         if success:
             anomaly_df = detector.detect_anomalies(st.session_state.df, features)
             st.session_state.anomaly_df = anomaly_df
+            st.session_state.detector = detector
             anomaly_summary = detector.get_anomaly_summary(anomaly_df)
         else:
             st.error(msg)
@@ -181,12 +183,6 @@ with tabs[0]:
         col2.metric("Valid Features", valid)
         col3.metric("Anomalies", anomalies)
 
-        # Risk Score Display
-        if st.session_state.report:
-            risk = st.session_state.report["risk_assessment"]["risk_score"]
-            st.progress(risk / 100)
-            st.caption(f"Overall Risk Score: {risk}")
-
     else:
         st.info("Upload a dataset to begin.")
 
@@ -202,7 +198,7 @@ with tabs[1]:
 
         viz = MapVisualizer()
         fig = viz.create_validation_map(st.session_state.validated_df)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="validation_map_tab2")
 
     else:
         st.info("Run analysis first.")
@@ -217,15 +213,17 @@ with tabs[2]:
 
         st.subheader("Feature Importance")
 
-        detector = AnomalyDetector()
-        importance = detector.get_feature_importance()
+        detector = st.session_state.detector
 
-        if importance:
-            st.bar_chart(pd.Series(importance).sort_values(ascending=False))
+        if detector and detector.model:
+            importance = detector.get_feature_importance()
+
+            if importance:
+                st.bar_chart(pd.Series(importance).sort_values(ascending=False))
 
         viz = MapVisualizer()
         fig = viz.create_anomaly_map(st.session_state.anomaly_df)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="anomaly_map_tab3")
 
     else:
         st.info("Run analysis first.")
@@ -252,7 +250,7 @@ with tabs[3]:
         else:
             fig = viz.create_severity_map(st.session_state.validated_df)
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="visualization_map_tab4")
 
     else:
         st.info("Run analysis first.")
@@ -274,7 +272,6 @@ with tabs[4]:
         for rec in st.session_state.report["recommendations"]:
             st.info(rec)
 
-        # JSON Download
         json_str = json.dumps(st.session_state.report, indent=2)
         st.download_button(
             "Download JSON Report",
