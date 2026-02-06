@@ -1,0 +1,86 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 1,
+        "name": "Building A",
+        "type": "residential"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [13.404954, 52.520008],
+          [13.405954, 52.520008],
+          [13.405954, 52.521008],
+          [13.404954, 52.521008],
+          [13.404954, 52.520008]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 2,
+        "name": "Building B",
+        "type": "commercial"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [13.406954, 52.520008],
+          [13.407954, 52.520008],
+          [13.407954, 52.521008],
+          [13.406954, 52.521008],
+          [13.406954, 52.520008]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 3,
+        "name": "Park Area",
+        "type": "park"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [13.404954, 52.522008],
+          [13.407954, 52.522008],
+          [13.407954, 52.524008],
+          [13.404954, 52.524008],
+          [13.404954, 52.522008]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 4,
+        "name": "Street Segment",
+        "type": "road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [13.404954, 52.519008],
+          [13.408954, 52.519008]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 5,
+        "name": "Point of Interest",
+        "type": "poi"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [13.406454, 52.520508]
+      }
+    }
+  ]
+}
